@@ -46,9 +46,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install "PySide6==6.10.3" "httpx>=0.27" "dashscope>=1.20" "numpy>=1.24" "python-dotenv>=1.0"
 
-      - name: Install PySide6 Android 部署依赖（含 pkginfo）
+      - name: Install pyside6-android-deploy 依赖（含 pkginfo 等）
         run: |
-          pip install -r "$(python -c "import pathlib, PySide6; print(pathlib.Path(PySide6.__file__).resolve().parent / 'scripts' / 'requirements-android.txt')")"   
+          pip install -r "$(python -c "import pathlib, PySide6; print(pathlib.Path(PySide6.__file__).resolve().parent / 'scripts' / 'requirements-android.txt')")"
 
       - name: Check android deploy script（仅 Linux wheel 附带）
         run: |
@@ -81,12 +81,27 @@ jobs:
           python tools/cross_compile_android/main.py --download-only --skip-update --auto-accept-license
 
       - name: Run pyside6-android-deploy（debug APK）
-        working-directory: ${{ github.workspace }}
+        env:
+          WS: ${{ github.workspace }}
         run: |
-          pyside6-android-deploy -f \
+          set -euo pipefail
+          # 工具要求：在「应用根目录」执行，且入口文件名为 main.py（与 app/ 同级）
+          if [ -f "$WS/main.py" ] && [ -d "$WS/app" ]; then
+            ROOT="$WS"
+          elif [ -f "$WS/ASR/main.py" ] && [ -d "$WS/ASR/app" ]; then
+            ROOT="$WS/ASR"
+          else
+            echo "未找到应用根目录（需要同时存在 main.py 与 app/）"
+            find "$WS" -maxdepth 4 -name main.py -print || true
+            exit 1
+          fi
+          echo "PROJECT_ROOT=$ROOT"
+          ls -la "$ROOT/main.py" "$ROOT/app"
+          cd "$ROOT"
+          pyside6-android-deploy -f main.py \
             --name "ASRRecorder" \
-            --wheel-pyside="${{ github.workspace }}/wheels/PySide6_android_aarch64.whl" \
-            --wheel-shiboken="${{ github.workspace }}/wheels/shiboken6_android_aarch64.whl" \
+            --wheel-pyside="$WS/wheels/PySide6_android_aarch64.whl" \
+            --wheel-shiboken="$WS/wheels/shiboken6_android_aarch64.whl" \
             --extra-ignore-dirs=.venv,.git,build,.idea,.github \
             --keep-deployment-files
 
