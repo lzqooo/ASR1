@@ -1,0 +1,74 @@
+================================================================================
+  将本 PySide6 项目打包为 Android APK / AAB（说明）
+================================================================================
+
+【最快拿 APK】请直接打开同目录下的「获取APK说明.txt」：已配置 GitHub Actions，
+把项目推送到 GitHub 后在网页上点运行，从 Artifacts 下载 APK。
+
+一、重要限制（请先读完）
+------------------------
+1. Qt 官方工具 pyside6-android-deploy 目前仅支持在 Linux 或 macOS 上运行，
+   在 Windows 本机无法直接执行。若你只有 Windows，请使用下面任一方式：
+   - 安装 WSL2（Ubuntu），在 WSL 内按本文「三」操作；或
+   - 使用一台 Linux / Mac 电脑或 CI（如 GitHub Actions 的 ubuntu-latest）。
+
+2. 当前工程依赖 dashscope、httpx、numpy 等。Android 打包时除 Qt 外，部分
+   原生扩展（如 numpy）可能需要 python-for-android 的 recipe 或额外
+   配置，首次打包往往需要根据报错逐项调整，无法保证「一次成功」。
+
+3. 麦克风、网络权限需在最终生成的 buildozer.spec / AndroidManifest 中
+   声明（RECORD_AUDIO、INTERNET）。若 deploy 未自动加入，需手动补充。
+
+4. 建议在 Android 上使用 Qt 音频后端（勿依赖 sounddevice / PortAudio），
+   即保持默认，勿在手机上设置 AUDIO_BACKEND=portaudio。
+
+二、仓库内已准备的文件
+------------------------
+- main.py              根目录入口（官方要求文件名必须为 main.py）
+- pysidedeploy.spec    部署配置草稿（需补全 wheel 路径、NDK/SDK 等）
+- app/bootstrap.py     实际启动逻辑（桌面与打包共用）
+
+三、在 Linux / macOS（或 WSL2 Ubuntu）上的简要步骤
+--------------------------------------------------
+1) 安装系统依赖：OpenJDK 17、git、python3-venv、unzip 等（WSL 与原生 Linux 类似）。
+
+2) 安装与桌面版同主版本的 PySide6，并确保包含部署脚本：
+     pip install "PySide6>=6.6"
+
+3) 按官方文档下载 Android NDK/SDK（可用 Qt 提供的脚本，见）：
+   https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-android-deploy.html
+
+4) 下载与目标架构一致的 PySide6 / Shiboken6 Android wheel（示例 arm64）：
+     qtpip download PySide6 --android --arch aarch64
+   将得到的 .whl 路径填入本目录 pysidedeploy.spec 中 [android] 的
+   wheel_pyside、wheel_shiboken。
+
+5) 在项目根目录执行（请将占位路径换成你的实际路径）：
+     pyside6-android-deploy --name "ASR转写总结" \
+       --wheel-pyside=/绝对路径/PySide6-....whl \
+       --wheel-shiboken=/绝对路径/shiboken6-....whl \
+       --extra-ignore-dirs=.venv,.git,build,.idea
+
+   若已把路径写入 pysidedeploy.spec，可在项目根执行：
+     pyside6-android-deploy --config-file pysidedeploy.spec \
+       --extra-ignore-dirs=.venv,.git,build,.idea
+
+6) debug 模式默认产出 .apk；将 pysidedeploy.spec 里 [buildozer] mode 改为
+   release 可产出 .aab（上架 Play 常用）。
+
+7) 在 WSL 中运行 pyside6-android-deploy 时，若在 Windows 上执行
+   ``pyside6-android-deploy``，工具会提示仅支持 Unix，属正常现象。
+
+四、验证 Windows 是否被支持
+------------------------
+在项目 venv 中执行（仅作说明，Windows 上会打印错误提示）：
+     pyside6-android-deploy --help
+
+五、替代方案（若 Qt Android 打包困难）
+------------------------
+- 将「录音 + 上传 + 展示结果」做成 Web 或 Flutter/React Native 客户端，
+  复用现有后端 API 逻辑；或
+- 使用 Kivy / BeeWare 等专为移动端设计的 Python 框架（需较大改写 UI）。
+
+更完整的参数说明请以 Qt 文档为准：
+https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-android-deploy.html
