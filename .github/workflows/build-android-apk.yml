@@ -114,7 +114,7 @@ jobs:
           echo "PROJECT_ROOT=$ROOT"
           ls -la "$ROOT/main.py" "$ROOT/app"
           cd "$ROOT"
-          pyside6-android-deploy -f \
+          pyside6-android-deploy -f -v \
             --name "ASRRecorder" \
             --sdk-path="${SDK}" \
             --ndk-path="${NDK_ROOT}" \
@@ -123,14 +123,31 @@ jobs:
             --extra-ignore-dirs=.venv,.git,build,.idea,.github \
             --keep-deployment-files
 
-      - name: List APK
-        if: always()
-        run: find "${{ github.workspace }}" -name "*.apk" -ls || true
+          echo "==== 部署后立即在应用目录查找 .apk ===="
+          find "$ROOT" -name "*.apk" -ls 2>/dev/null || true
+          ls -la "$ROOT/bin" 2>/dev/null || true
+
+      - name: 收集 APK 并上传（无文件则失败）
+        run: |
+          set -euo pipefail
+          WS="${{ github.workspace }}"
+          OUT="$WS/_apk_out"
+          mkdir -p "$OUT"
+          # buildozer 常见：应用根目录 bin/ 或 .buildozer 下
+          find "$WS" -type f -name "*.apk" 2>/dev/null | while read -r f; do
+            cp -v "$f" "$OUT/"
+          done
+          echo "==== _apk_out 内容 ===="
+          ls -la "$OUT" || true
+          n="$(find "$OUT" -type f -name '*.apk' 2>/dev/null | wc -l)"
+          if [ "${n}" -eq 0 ]; then
+            echo "::error::未找到任何 APK。请打开上一步「Run pyside6-android-deploy」完整日志，查看 buildozer 是否报错或未完成编译。"
+            exit 1
+          fi
 
       - name: Upload APK artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: asr-android-debug-apk
-          path: "**/*.apk"
-          if-no-files-found: warn
+          path: _apk_out/*.apk
+          if-no-files-found: error
