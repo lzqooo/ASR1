@@ -70,21 +70,37 @@ jobs:
           wget -nv -O wheels/shiboken6_android_aarch64.whl \
             "https://download.qt.io/official_releases/QtForPython/shiboken6/shiboken6-6.10.3-6.10.3-cp311-cp311-android_aarch64.whl"
 
-      - name: Download Android SDK / NDK（Qt 官方脚本，写入用户目录缓存）
-        run: |
-          git clone --branch 6.10.3 --depth 1 https://code.qt.io/pyside/pyside-setup.git /tmp/pyside-setup
-          cd /tmp/pyside-setup
-          pip install -r requirements.txt
-          if [ -f tools/cross_compile_android/requirements.txt ]; then
-            pip install -r tools/cross_compile_android/requirements.txt
-          fi
-          python tools/cross_compile_android/main.py --download-only --skip-update --auto-accept-license
+      # Qt 自带下载脚本在 CI 里经常无法被 deploy 自动识别；用官方 action 安装 SDK/NDK 并显式传参
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'ndk;26.1.10909125 platforms;android-34 build-tools;35.0.0 platform-tools'
 
       - name: Run pyside6-android-deploy（debug APK）
         env:
           WS: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.android/sdk}}"
+          if [ -z "${SDK}" ] || [ ! -d "${SDK}" ]; then
+            echo "未找到 Android SDK 目录（ANDROID_SDK_ROOT / ANDROID_HOME / ~/.android/sdk）"
+            exit 1
+          fi
+          # 与上面 sdkmanager 安装的 NDK 版本一致
+          NDK_VER="26.1.10909125"
+          NDK_ROOT="${SDK}/ndk/${NDK_VER}"
+          if [ ! -d "${NDK_ROOT}" ]; then
+            echo "在 ${SDK}/ndk 下查找 NDK…"
+            ls -la "${SDK}/ndk" || true
+            NDK_ROOT="$(find "${SDK}/ndk" -mindepth 1 -maxdepth 1 -type d | head -1)"
+          fi
+          if [ -z "${NDK_ROOT}" ] || [ ! -d "${NDK_ROOT}/toolchains/llvm/prebuilt" ]; then
+            echo "无法解析 NDK 根目录"
+            exit 1
+          fi
+          echo "ANDROID_SDK_ROOT=${SDK}"
+          echo "NDK_ROOT=${NDK_ROOT}"
+
           # 工具要求：在「应用根目录」执行，且入口文件名为 main.py（与 app/ 同级）
           if [ -f "$WS/main.py" ] && [ -d "$WS/app" ]; then
             ROOT="$WS"
@@ -98,9 +114,10 @@ jobs:
           echo "PROJECT_ROOT=$ROOT"
           ls -la "$ROOT/main.py" "$ROOT/app"
           cd "$ROOT"
-          # 必须在含 main.py 的目录执行；此 CLI 不接受 main.py 作为位置参数
           pyside6-android-deploy -f \
             --name "ASRRecorder" \
+            --sdk-path="${SDK}" \
+            --ndk-path="${NDK_ROOT}" \
             --wheel-pyside="$WS/wheels/PySide6_android_aarch64.whl" \
             --wheel-shiboken="$WS/wheels/shiboken6_android_aarch64.whl" \
             --extra-ignore-dirs=.venv,.git,build,.idea,.github \
