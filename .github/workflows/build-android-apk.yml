@@ -62,10 +62,64 @@ jobs:
           print("ok")
           PY
 
-      # Qt 依赖 XML 未必含 RECORD_AUDIO 等；合并进 buildozer.spec，避免运行时缺权限崩溃
+      # Qt 依赖 XML 未必含 RECORD_AUDIO 等；合并进 buildozer.spec（内联脚本，不依赖仓库 scripts/ 是否已提交）
       - name: Patch PySide buildozer 权限合并（ASR）
         run: |
-          python "${{ github.workspace }}/scripts/patch_pyside_android_permissions.py"
+          python << 'PATCH_PY'
+          import pathlib
+          import re
+          import sys
+
+          MARKER = "# ASR_EXTRA_ANDROID_PERMISSIONS"
+          _PATCH_RE = re.compile(
+              r"""
+              (?P<head>[ \t]*permissions\s*=\s*self\.__find_permissions\(\s*pysidedeploy_config\.dependency_files\s*\)\s*\n)
+              (?P<mid>[ \t]*permissions\s*=\s*["'],\s*["']\.join\(\s*permissions\s*\)\s*\n)
+              (?P<tail>[ \t]*self\.set_value\(\s*["']app["']\s*,\s*["']android\.permissions["']\s*,\s*permissions\s*\))
+              """,
+              re.VERBOSE,
+          )
+
+          def injection_block(indent: str) -> str:
+              lines = [
+                  f"{indent}{MARKER}: mic + network for ASR client app",
+                  f"{indent}permissions.update(",
+                  f"{indent}    {{",
+                  f'{indent}        "INTERNET",',
+                  f'{indent}        "RECORD_AUDIO",',
+                  f'{indent}        "MODIFY_AUDIO_SETTINGS",',
+                  f'{indent}        "WAKE_LOCK",',
+                  f'{indent}        "ACCESS_NETWORK_STATE",',
+                  f"{indent}    }}",
+                  f"{indent})",
+                  f'{indent}permissions = ", ".join(sorted(permissions))',
+              ]
+              return "\n".join(lines)
+
+          import PySide6
+
+          root = pathlib.Path(PySide6.__file__).resolve().parent
+          target = root / "scripts" / "deploy_lib" / "android" / "buildozer.py"
+          if not target.is_file():
+              print(f"No android buildozer module at {target}, skip")
+              sys.exit(0)
+          text = target.read_text(encoding="utf-8")
+          if MARKER in text:
+              print(f"Already patched: {target}")
+              sys.exit(0)
+          m = _PATCH_RE.search(text)
+          if not m:
+              print(
+                  f"patch: permission block not found in {target}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          indent = re.match(r"(\s*)", m.group("head")).group(1)
+          replacement = m.group("head") + injection_block(indent) + "\n" + m.group("tail")
+          new_text = text[: m.start()] + replacement + text[m.end() :]
+          target.write_text(new_text, encoding="utf-8")
+          print(f"Patched: {target}")
+          PATCH_PY
 
       - name: Download PySide6 / Shiboken6 Android wheels (aarch64, Python 3.11)
         run: |
