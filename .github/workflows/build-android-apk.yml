@@ -62,6 +62,11 @@ jobs:
           print("ok")
           PY
 
+      # Qt 依赖 XML 未必含 RECORD_AUDIO 等；合并进 buildozer.spec，避免运行时缺权限崩溃
+      - name: Patch PySide buildozer 权限合并（ASR）
+        run: |
+          python "${{ github.workspace }}/scripts/patch_pyside_android_permissions.py"
+
       - name: Download PySide6 / Shiboken6 Android wheels (aarch64, Python 3.11)
         run: |
           mkdir -p wheels
