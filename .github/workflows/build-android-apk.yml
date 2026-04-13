@@ -16,7 +16,7 @@ concurrency:
 jobs:
   apk:
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
+    timeout-minutes: 240
 
     steps:
       - name: Checkout
@@ -75,6 +75,28 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           packages: 'ndk;26.1.10909125 platforms;android-34 build-tools;35.0.0 platform-tools'
+
+      # buildozer / python-for-android 仍查找已废弃的 tools/bin/sdkmanager（新 SDK 在 cmdline-tools/*/bin/）
+      - name: 兼容 buildozer 的旧版 sdkmanager 路径
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.android/sdk}}"
+          SM=""
+          if command -v sdkmanager >/dev/null 2>&1; then
+            SM="$(command -v sdkmanager)"
+          fi
+          if [ -z "${SM}" ] || [ ! -f "${SM}" ]; then
+            SM="$(find "${SDK}/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -1)"
+          fi
+          if [ -z "${SM}" ] || [ ! -f "${SM}" ]; then
+            echo "未找到 sdkmanager"
+            find "${SDK}" -maxdepth 5 -name sdkmanager 2>/dev/null || true
+            exit 1
+          fi
+          echo "Using sdkmanager: ${SM}"
+          mkdir -p "${SDK}/tools/bin"
+          ln -sfn "${SM}" "${SDK}/tools/bin/sdkmanager"
+          "${SDK}/tools/bin/sdkmanager" --version
 
       - name: Run pyside6-android-deploy（debug APK）
         env:
