@@ -46,6 +46,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install "PySide6==6.10.3" "httpx>=0.27" "dashscope>=1.20" "numpy>=1.24" "python-dotenv>=1.0"
 
+      - name: Install PySide6 Android 部署依赖（含 pkginfo）
+        run: |
+          pip install -r "$(python -c "import pathlib, PySide6; print(pathlib.Path(PySide6.__file__).resolve().parent / 'scripts' / 'requirements-android.txt')")"   
+
       - name: Check android deploy script（仅 Linux wheel 附带）
         run: |
           python << 'PY'
