@@ -98,7 +98,8 @@ jobs:
           echo "PROJECT_ROOT=$ROOT"
           ls -la "$ROOT/main.py" "$ROOT/app"
           cd "$ROOT"
-          pyside6-android-deploy -f main.py \
+          # 必须在含 main.py 的目录执行；此 CLI 不接受 main.py 作为位置参数
+          pyside6-android-deploy -f \
             --name "ASRRecorder" \
             --wheel-pyside="$WS/wheels/PySide6_android_aarch64.whl" \
             --wheel-shiboken="$WS/wheels/shiboken6_android_aarch64.whl" \
